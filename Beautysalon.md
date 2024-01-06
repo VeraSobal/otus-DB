@@ -1,3 +1,4 @@
+
 ## <h>База данных "Салон красоты"</h>
 
 ### <h>Содержание</h>
@@ -38,7 +39,7 @@
 | updater_person_id | int         | NOT NULL     | Идентификатор создателя записи			  | 
 | status            | smallint    | NOT NULL     | Статус записи: 1 - active, 2 - provided, 3 - cancelled | 
 | date_updated      | date        |              | Дата изменения записи				  | 
-| comment           | varchar(255)| NOT NULL     | Комментарий						  |
+| comment           | varchar(255)|              | Комментарий						  |
 
 **Первичный ключ:**<br>
     appointment_id<br>
@@ -47,6 +48,7 @@
 **Ограничения-проверки:**<br>
     CHECK (date_updated >= date_created or date_updated is NULL)<br>
     CHECK (date >= date_created)<br>
+    CHECK (status in (1,2,3))<br>
 **Ссылки извне:**<br>
     FOREIGN KEY (client_id) REFERENCES client(client_id)<br>
     FOREIGN KEY (updater_person_id) REFERENCES person(person_id)<br>
@@ -55,6 +57,26 @@
 Поле appointment_id является первичным ключом. У полей date и client_id высокая кардинальность, более высокая - у поля date.<br>
 Создаем составной индекс:<br>
 CREATE INDEX idx_appointment_date_clientid ON appointment (date, client_id)<br>
+<br>
+CREATE TABLE appointment.appointment(
+   appointment_id SERIAL,
+   client_id int NOT NULL,
+   date date NOT NULL,
+   date_created date NOT NULL,
+   updater_person_id int NOT NULL,
+   status smallint NOT NULL,
+   date_updated date,
+   comment varchar(255),
+   PRIMARY KEY (appointment_id),
+   FOREIGN KEY (client_id)
+      REFERENCES client(client_id),
+   FOREIGN KEY (updater_person_id)
+      REFERENCES person(person_id),
+   CHECK (date_updated >= date_created or date_updated is NULL),
+   CHECK (date >= date_created),
+   CHECK (status in (1,2,3))
+);
+<br>
 
 #### <a id="title2.2">Таблица appointment_service</a>
 **Описание:** Услуги, входящие в запись
@@ -72,8 +94,8 @@ CREATE INDEX idx_appointment_date_clientid ON appointment (date, client_id)<br>
 **Индексы:**<br>
     PRIMARY KEY(appointment_id, service_id, employee_id, booked_provided), btree(appointment_id)<br>
 **Ограничения-проверки:**<br>
-    CHECK (service_qty >= 0)<br>
-    CHECK (booked_provided = 1 or booked_provided = 2)<br>
+    CHECK (service_qty > 0)<br>
+    CHECK (booked_provided in (1,2))<br>
 **Ссылки извне:**<br>
     FOREIGN KEY (appointment_id) REFERENCES appointment(appointment_id)<br>
     FOREIGN KEY (service_id) REFERENCES service(service_id)<br>
@@ -83,6 +105,25 @@ CREATE INDEX idx_appointment_date_clientid ON appointment (date, client_id)<br>
 Поля (appointment_id, employee_id, start_time, booked_provided) являются составным первичным ключом. Из полей appointment_id, employee_id, service_id высокая кардинальность у поля appointment_id.<br>
 Создаем индекс:<br>
 CREATE INDEX idx_appointmentservice_appointmentid ON appointment_service (appointment_id);<br>
+<br>
+CREATE TABLE appointment.appointment_service(
+   appointment_id int NOT NULL,
+   service_id int NOT NULL,
+   service_qty smallint NOT NULL,
+   start_time time NOT NULL,
+   employee_id int NOT NULL,
+   status smallint NOT NULL,
+   PRIMARY KEY (appointment_id, service_id,status),
+   FOREIGN KEY (appointment_id)
+      REFERENCES appointment(appointment_id),
+   FOREIGN KEY (service_id)
+      REFERENCES service(service_id),
+   FOREIGN KEY (employee_id)
+      REFERENCES employee(employee_id),
+   CHECK (service_qty > 0),
+   CHECK (booked_provided in (1,2))
+);
+<br>
 
 #### <a id="title2.3">Таблица person</a>
 **Описание:** Данные человека.<br>
@@ -92,8 +133,8 @@ CREATE INDEX idx_appointmentservice_appointmentid ON appointment_service (appoin
 | person_id         | serial      | NOT NULL         | Идентификатор человека                             |
 | first_name        | varchar(50) | NOT NULL         | Имя                                                |
 | last_name         | varchar(50) | NOT NULL         | Фамилия						  |
-| email             | varchar(50) | NOT NULL         | Адрес электронной почты				  |
-| phone_number      | varchar(25) | NOT NULL         | Номер телефона					  |
+| email             | varchar(50) |                  | Адрес электронной почты				  |
+| phone_number      | varchar(25) | NOT NULL UNIQUE  | Номер телефона					  |
 
 **Первичный ключ:**<br>
     person_id<br>
@@ -106,6 +147,18 @@ CREATE INDEX idx_appointmentservice_appointmentid ON appointment_service (appoin
 Предполагаются запросы по полю person_id. 
 Поле person_id является первичным ключом.
 Создание дополнительного индекса не предполагается.<br>
+<br>
+CREATE TABLE person(
+   person_id SERIAL,
+   first_name varchar(50) NOT NULL,
+   last_name varchar(50) NOT NULL,
+   email varchar(50),
+   phone_number varchar(25) NOT NULL UNIQUE,
+   PRIMARY KEY (person_id),
+   CHECK (email  маска REGEX OR NULL),
+   CHECK (phone_number  маска REGEX)
+);
+<br>
 
 #### <a id="title2.4">Таблица client</a>
 **Описание:** Определяет человека в качестве клиента.<br>
@@ -125,6 +178,15 @@ CREATE INDEX idx_appointmentservice_appointmentid ON appointment_service (appoin
 Предполагаются запросы по полю person_id, client_id. 
 Поле client_id является первичным ключом, поле person_id - уникальное. 
 Создание дополнительного индекса не предполагается.<br>
+<br>
+CREATE TABLE client(
+   client_id SERIAL,
+   person_id int NOT NULL UNIQUE,
+   PRIMARY KEY (client_id),
+   FOREIGN KEY (person_id)
+      REFERENCES person (person_id)
+);
+<br>
 
 #### <a id="title2.5">Таблица employee</a>
 **Описание:** Определяет человека в качестве работника. Работник с end_date NULL - действующий.<br>
@@ -151,6 +213,20 @@ CREATE INDEX idx_appointmentservice_appointmentid ON appointment_service (appoin
 Поле employee_id является первичным ключом, поле person_id - уникальное. У полей start_date, end_date высокая кардинальность, более высокая - у поля start_date.<br>
 Создаем составной индекс:<br>
 CREATE INDEX idx_employee_startdate_enddate ON employee (start_date, end_date);<br>
+<br>
+CREATE TABLE employee(
+   employee_id SERIAL,
+   person_id int NOT NULL UNIQUE,
+   salary money NOT NULL,
+   position varchar(50) NOT NULL,
+   start_date date NOT NULL,
+   end_date date,
+   PRIMARY KEY (employee_id),
+   FOREIGN KEY (person_id)
+      REFERENCES person (person_id),
+   CHECK (end_date >= start_date or end_date is NULL)
+);
+<br>
 
 #### <a id="title2.6">Таблица employee_week_schedule</a>
 **Описание:** Расписание временных интервалов работы персонала по дням недели.<br>
@@ -176,6 +252,20 @@ CREATE INDEX idx_employee_startdate_enddate ON employee (start_date, end_date);<
 У полей start_time, end_time, employee_id средняя кардинальность, у поля day_of_week - низкая. <br>
 Создаем составной индекс:<br>
 CREATE INDEX idx_employeeweekschedule_starttime_endtime ON employee_week_schedule (start_time, end_time);<br>
+<br>
+CREATE TABLE employee_week_schedule(
+   schedule_id SERIAL,
+   employee_id int NOT NULL,
+   day_of_week smallint NOT NULL,
+   start_time time NOT NULL,
+   end_time time NOT NULL,
+   PRIMARY KEY (schedule_id),
+   FOREIGN KEY (employee_id)
+      REFERENCES employee (employee_id),
+   CHECK (end_time > start_time),
+   CHECK (day_of_week IN (1,2,3,4,5,6,7))
+);
+<br>
 
 #### <a id="title2.7">Таблица service</a>
 **Описание:** Предоставляемые услуги.<br>
@@ -185,19 +275,29 @@ CREATE INDEX idx_employeeweekschedule_starttime_endtime ON employee_week_schedul
 | service_id        | serial      | NOT NULL         | Идентификатор услуги				  |
 | service_name      | varchar(50) | NOT NULL         | Наименование услуги				  |
 | price             | money       | NOT NULL         | Стоимость услуги					  |
-| duration          | time        | NOT NULL         | Продолжительность услуги				  |
+| duration          | smallint    | NOT NULL         | Продолжительность услуги				  |
 
 **Первичный ключ:**<br>
     service_id<br>
 **Индексы:**<br>
     PRIMARY KEY(service_id), b-tree(duration)<br>
 **Ограничения-проверки:**<br>
-    CHECK (end_time > start_time)<br>
+    CHECK (duration>0)<br>
 
 Предполагаются запросы по полю service_id, duration (в порядке убывания частоты запросов). 
 Поле service_id является первичным ключом. Поле duration имеет среднюю кардинальность.<br>
 Создаем индекс:<br>
 CREATE INDEX idx_service_duration ON service (duration);<br>
+<br>
+CREATE TABLE service(
+   service_id SERIAL,
+   service_name varchar(50) NOT NULL,
+   price money NOT NULL,
+   duration smallint NOT NULL,
+   PRIMARY KEY (service_id),
+   CHECK (duration>0)
+);   
+<br>
 
 #### <a id="title2.8">Таблица employee_service</a>
 **Описание:** Работник осуществляет одну и более услуг.
@@ -217,7 +317,17 @@ CREATE INDEX idx_service_duration ON service (duration);<br>
 Предполагаются запросы по полю service_id, employee_id. 
 Поля service_id, employee_id являются составным первичным ключом. 
 Создание дополнительного индекса не предполагается.<br>
-
+<br>
+CREATE TABLE employee_service(
+   service_id int NOT NULL,
+   employee_id int NOT NULL,
+   PRIMARY KEY (service_id, employee_id),
+   FOREIGN KEY (service_id)
+      REFERENCES service (service_id),
+   FOREIGN KEY (employee_id)
+      REFERENCES employee (employee_id)
+);
+<br>
 
 #### <a id="title2.9">Таблица category</a>
 **Описание:** Категории услуг.
@@ -225,7 +335,7 @@ CREATE INDEX idx_service_duration ON service (duration);<br>
 |-------------------|-------------|--------------|--------------------------------------------------------|
 | category_id       | serial      | NOT NULL     | Идентификатор категории				  |
 | category_name     | varchar(50) | NOT NULL     | Наименование категории				  |
-| comment           | varchar(255)| NOT NULL     | Комментарий к категории				  |
+| comment           | varchar(255)|              | Комментарий к категории				  |
 
 **Первичный ключ:**<br>
     category_id, <br>
@@ -235,6 +345,14 @@ CREATE INDEX idx_service_duration ON service (duration);<br>
 Поле category_id является первичным ключом. Поле category_name имеет высокую кардинальность.<br>
 Создаем индекс:<br>
 CREATE INDEX idx_category_category_name ON category (category_name);<br>
+<br>
+CREATE TABLE category(
+   category_id SERIAL,
+   category_name varchar(50) NOT NULL,
+   comment varchar(255),
+   PRIMARY KEY (category_id)
+);
+<br>
 
 #### <a id="title2.10">Таблица service_category</a>
 **Описание:** Категория включает в себя одну и более услуг.
@@ -253,7 +371,17 @@ CREATE INDEX idx_category_category_name ON category (category_name);<br>
 Предполагаются запросы по полю service_id, employee_id. 
 Поля service_id, employee_id являются составным первичным ключом. 
 Создание дополнительного индекса не предполагается.<br>
-
+<br>
+CREATE TABLE service_category(
+   service_id int NOT NULL,
+   category_id int NOT NULL,
+   PRIMARY KEY (service_id, category_id),
+   FOREIGN KEY (service_id)
+      REFERENCES service (service_id),
+   FOREIGN KEY (category_id)
+      REFERENCES category (category_id)
+);
+<br>
 
 #### <a id="title2.11">Таблица discount</a>
 **Описание:** К категориям услуг применяется скидка.
@@ -263,7 +391,7 @@ CREATE INDEX idx_category_category_name ON category (category_name);<br>
 | category_id       | int         | NOT NULL     | Идентификатор категории				  |
 | discount_pct      | smallint    | NOT NULL     | Скидка в процентах					  |
 | discount_name     | varchar(50) | NOT NULL     | Наименование скидки				 	  |
-| comment           | varchar(255)| NOT NULL     | Описание скидки					  |
+| comment           | varchar(255)|              | Описание скидки					  |
 | start_date        | date        | NOT NULL     | Дата начала применения скидки			  |
 | end_date          | date        | NOT NULL     | Дата окончания применения скидки			  |
 
@@ -281,10 +409,27 @@ CREATE INDEX idx_category_category_name ON category (category_name);<br>
 У полей start_date, end_date, category_id высокая кардинальность, более высокая - у полей start_date, end_date. <br>
 Создаем составной индекс:<br>
 CREATE INDEX idx_discount_startdate_enddate ON discount (start_date, end_date);<br>
-
+<br>
+CREATE TABLE discount(
+   discount_id SERIAL,
+   category_id int NOT NULL,
+   discount_pct smallint NOT NULL,
+   discount_name varchar(50) NOT NULL,
+   comment varchar(255),
+   start_date date NOT NULL,
+   end_date date NOT NULL,
+   PRIMARY KEY (discount_id),
+   FOREIGN KEY (category_id)
+      REFERENCES category (category_id),
+   CHECK (end_date >= start_date),
+   CHECK (discount_pct > 0 and discount_pct<=100)
+);
+<br>
 
 ### <a id="title3">3. Примеры бизнес-задач</a>
 
    - Оформление и расписание записей.
    - Расчет оплаты сотрудников.
    - Расчет дохода и расхода в разрезе сотрудников за месяц.
+
+
